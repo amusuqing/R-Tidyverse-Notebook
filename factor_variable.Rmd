@@ -1,0 +1,51 @@
+---
+title: "factor variable"
+author: "Su Qing"
+date: "2022/9/8"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio)
+library(stringr)
+here()
+```
+
+## 创建因子型变量,修改因子水平
+
+因子向量在创建的时候，会默认因子的水平按照因子首字母的顺序排列，因此，当我们想自己设置因子变量的水平时，需要自己手动设置。选项levels=c(); 修改水平fct_relevel()
+
+```{r}
+income <- c("low", "high", "medium", "medium", "low", "high",  "high")
+factor(income)
+x <- factor(income, levels = c("low",  "medium","high") )
+x
+x %>% fct_relevel("high", "medium","low") #改变因子变量的水平
+x %>% fct_relevel("medium") #将medium设置为第一水平
+x %>% fct_relevel("medium","low")
+x %>% fct_relevel("medium", after = Inf) #将mediun设置为最后一个水平
+x %>% fct_relevel("medium", after = 2) #将medium放置于两水平之后，即第三
+x %>% fct_inorder() #可以按照字符串第一次出现的次序
+```
+
+## 因子水平的设置对绘图有重要影响
+
+```{r}
+d <- tibble(
+  x = c("a","a", "b", "b", "c", "c"),
+  y = c(2, 2, 1, 5,  0, 3)
+  
+)
+d
+d %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point()
+```

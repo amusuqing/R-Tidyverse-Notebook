@@ -1,0 +1,139 @@
+---
+title: "mutate_variables"
+author: "Su Qing"
+date: "2022/9/9"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio) # 读取数据
+library(forcats) # 处理因子
+library(haven) # 读取数据
+library(stringr) # 字符处理
+`%nin%` <- Negate(`%in%`) # 对%in%取反
+here() # 查看当前工作路径
+options(digits = 3) # 防止计算均值时小数点过多
+options(scipen = 200) # 防止科学计数法出现
+```
+
+## 创建变量
+
+### 按照分组计算观察值，并创建变量
+
+add_count(x,name = ""),计算变量x出现的次数
+
+```{r}
+df <- tibble(
+  name = c("Alice", "Alice", "Bob", "Bob", "Carol", "Carol"),
+  type = c("english", "math", "english", "math", "english", "math"),
+  score = c(60.2, 90.5, 92.2, 98.8, 82.5, 74.6)
+)
+df
+df %>% add_count(name, name = "num_name") # 计算不同名字出现了几次
+
+df %>%
+  rename(c(ID = "name", class = "type", grade = "score"))
+```
+
+### 行标：nth(), first(), last()
+
+nth():代表第几行，nth(3)代表第3行
+first():首行
+last():尾行
+
+简单案例:
+
+```{r}
+v <- c("a", "c", "d", "k")
+v %>% first()
+v %>% last()
+v %>% nth(3)
+```
+
+### 利用行标计算新变量
+
+面板数据中，想求两年抑郁得分的差值，怎么求？或者多期面板数据求差值怎么求？就是利用这一行定位值.last()-first or nth(n+1)-nth(n-1)
+
+```{r}
+panel <- tibble(id = c(1, 1, 2, 2, 3, 3, 4, 4, 5, 5), year = rep(c(2015, 2018), times = 5), depr = c(2, NA, NA, 2, 4, NA, 8, 3, 7, NA), sati = c(NA, 4, NA, 8, 9, NA, 7, 3, 7, NA))
+panel
+panel %>%
+  mutate(
+    across(depr:sati, ~ if_else(is.na(.), mean(., na.rm = TRUE), .), .names = "{.col}_m")
+  ) %>%
+  arrange(id, year) %>%
+  group_by(id) %>%
+  mutate(
+    across(
+      depr_m:sati_m, ~ last(.) - first(.),
+      .names = "{.col}_dif"
+    )
+  ) %>%
+  ungroup() # or ~ nth(.,2)-nth(.,1)
+```
+
+### 利用if_else创建或修改二分类变量，要转换为因子，并修改因子水平
+
+if_else的功能十分强大，在填补缺失值，修改变量取值时，都应该想到if_else，他就像stata中的replace，但是比replace更加强大，因为他可以和mutate,across等函数联合使用进行批量处理。
+
+```{r}
+df
+df1 <- df %>%
+  mutate(
+    bi_score = if_else(score > 80, "good", "not good")
+  ) %>%
+  mutate(
+    across(where(is.character), as.factor)
+  ) %>%
+  mutate(bi_score = factor(bi_score, levels = c("not good", "good")))
+
+factor(df1$bi_score)
+levels(df1$bi_score)
+```
+
+### case_when函数创建和修改多分类变量,并转换为因子
+
+```{r}
+df
+df %>%
+  mutate(
+    assess = case_when(
+      score < 70 ~ "bad",
+      between(score, 70, 80) ~ "good",
+      score > 80 ~ "great",
+      TRUE ~ "other"
+    )
+  ) %>%
+  mutate(assess = as.factor(assess))
+```
+
+
+### mutate变体函数，mutate_all,mutate_at,mutate_if
+
+在第 12 章介绍了dplyr的一些函数（mutate(),select()等等），事实上，这些函数加上后缀_all,_at,_if，形成三组变体函数，可以方便对特定的子集进行操作。mutate_if使用较多，其中新变量的命名是oldvar_fun
+
+```{r}
+df_iris <- iris %>%
+  as_tibble() %>%
+  head(5)
+df_iris
+df_iris %>% mutate_if(is.double, as.integer)
+df_iris %>% mutate_if(is.numeric, list(scale = scale, log = log)) # list中可以包含不同类型的变量名，左边是新变量名后加var1_scale\var2_log，右边是函数。
+df_iris %>%
+  mutate_if(is.factor, as.numeric)
+```
+
+
+```{r}
+panel1518 <- read_dta("panel1518.dta")
+panel1518
+```

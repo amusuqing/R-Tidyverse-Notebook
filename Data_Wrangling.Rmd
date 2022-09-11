@@ -1,0 +1,172 @@
+---
+title: "Data Wrangling"
+author: "苏青"
+date: "2022/9/7"
+output: 
+  html_document: 
+    toc: yes
+    number_sections: yes
+---
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio)
+library(stringr)
+here()
+```
+
+## **`expand()` 和 `complete()函数`**
+
+expand展示各变量所有取值的所有组合。expand联合nesting可以展示所选变量已出现的所有组合，没有出现的组合就不算。
+
+nesting参数展示的是所选变量的所有在原来数据集中存在的所有唯一组合，重复组合会去掉。
+
+To find only the combinations that occur in the data, use `nesting`: `expand(df, nesting(x, y, z))`.
+
+```{r}
+df <- tibble::tribble(
+  ~x, ~y, ~z,
+  1L, 1L, 4L,
+  1L, 2L, 5L,
+  2L, 1L, NA,
+  3L, 2L, 6L
+)
+df
+df %>% expand(x, y)
+df %>% expand(nesting(x,y)) %>% datatable()
+df %>% expand(nesting(x,y),z) %>% datatable()
+```
+
+complete函数范例: complete()函数会展示所有选中变量的各种组合（包括数据集中原本不存在的组合）。然后在选中变量后面填补上没有的变量。
+
+```{r}
+df <- tibble(
+  group = c(1:2, 1, 2),
+  item_id = c(1:2, 2, 3),
+  item_name = c("a", "a", "b", "b"),
+  value1 = c(1, NA, 3, 4),
+  value2 = 4:7
+)
+df
+complete(df, group, item_id, item_name) %>% 
+  datatable
+complete(df, group, nesting(item_id, item_name)) %>% 
+  datatable #item_id 和 item_name能够观察到的组合，与group的全部组合，包括在原数据集观察不到的组合
+```
+
+    # Within each `group`, generate all possible combinations of
+    # `item_id` and `item_name` that occur in that group
+
+先对数据集按照某变量进行分组，分组后，再用compelete展示某两个变量的全部组合，注意的是这些组合都是原来group中已经有的组合。
+
+填补缺失值（缺失值分为implicit missing values和explicit missing values，前者代表在原始数据集中就存在的缺失值，因此又叫显式缺失值，后者是隐式缺失值，代表原始数据集中没有，后来complete后多出来的缺失值）
+
+-   You can also choose to fill in missing values. By default, both implicit (new) and explicit (pre-existing) missing values are filled.
+
+-   You can limit the fill to only implicit missing values by setting \`explicit\` to \`FALSE\`
+
+```{r}
+df <- tibble(
+  group = c(1:2, 1, 2),
+  item_id = c(1:2, 2, 3),
+  item_name = c("a", "a", "b", "b"),
+  value1 = c(1, NA, 3, 4),
+  value2 = 4:7
+)
+df
+df %>%
+  group_by(group) %>%
+  complete(item_id, item_name)
+#解析：group中有1和2两组，在group1中，item_id存在两个取值1,2，item_name存在两个取值a,b。完全组合就有4种情况，1a,1b,2a,2b.在group2中，item_id存在两个取值2,3，item_name存在两个取值a,b。完全组合就有4种情况，2a,2b,3a,3b.
+
+#利用特定数字填补缺失值。使用fill参数。这里默认的是所有显式缺失值和隐式缺失值都被取代。
+complete(
+  df,
+  group,
+  nesting(item_id, item_name),
+  fill = list(value1 = 0, value2 = 99)
+)
+
+#若只取代隐式缺失值。explicit = FALSE
+complete(
+  df,
+  group,
+  nesting(item_id, item_name),
+  fill = list(value1 = 0, value2 = 99),
+  explicit = FALSE
+)
+```
+
+## **`expand_grid()` 和 `crossing()函数`**
+
+产生一个新的数据框，每行对应着向量元素的所有交叉组合；
+
+向量换成数据框也可以，其结果就是数据框行与元素的交叉组合；
+
+[`crossing()`](https://tidyr.tidyverse.org/reference/expand.html)可以看作是`expand_grid() + distinct()`， 即[`crossing()`](https://tidyr.tidyverse.org/reference/expand.html)在完成交叉组合之后会自动去重。
+
+```{r}
+x <- c(1:3,2)
+y <- c(1,1:2)
+x
+y
+expand_grid(x,y) %>% datatable #全部组合，包括重复的组合。其实就是拿x中所有的数值和y中的所有数值进行匹配，可以允许重复。
+crossing(x,y) %>% datatable #crossing相当于在expand_grid的基础上不允许重复
+#向量换成数据框也可以，其结果就是数据框行与元素的交叉组合
+expand_grid(df = data.frame(x = 1:2, y = c(2, 1)), z = 1:3)
+crossing(df = data.frame(x = 1:2, y = c(2, 1)), z = 1:3)
+```
+
+## **`separate()` 和`unite()函数以及extract()函数`**
+
+remove = FALSE参数表示保留原来的变量
+
+```{r}
+tb <- tibble::tribble(
+  ~day, ~price,
+  1,   "30-45",
+  2,   "40-95",
+  3,   "89-65",
+  4,   "45-63",
+  5,   "52-42"
+)
+tb
+tb1 <- tb %>%
+  separate(price, into = c("low", "high"), sep = "-",remove = FALSE)
+tb1
+tb1 %>%
+  unite(col = "price", c(low, high), sep = ":", remove = FALSE)
+
+```
+
+extract函数可以使用正则表达式分解变量名
+
+```{r}
+dfc <- tibble(x = c("1-12week", "1-10wk", "5-12w", "01-05weeks"))
+dfc
+dfc %>% tidyr::extract(
+  x,
+  c("start", "end", "letter"), "(\\d+)-(\\d+)([a-z]+)",
+  remove = FALSE
+)
+```
+
+## [coalesce()](https://dplyr.tidyverse.org/reference/coalesce.html)函数的利用
+
+```{r}
+df <- tibble::tribble(
+    ~name,     ~type, ~score, ~extra,
+  "Alice", "english",     80,     10,
+  "Alice",    "math",     NA,      5,
+    "Bob", "english",     NA,      9,
+    "Bob",    "math",     69,     NA,
+  "Carol", "english",     80,     10,
+  "Carol",    "math",     90,      5
+  )
+
+df
+```

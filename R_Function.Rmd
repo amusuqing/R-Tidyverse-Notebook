@@ -1,0 +1,164 @@
+---
+title: "RFunctionProgramming"
+author: "Su Qing"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio)
+library(stringr)
+rmarkdown::find_pandoc(version = '2.9.1')
+here()
+exams <- list(
+  student1 = round(runif(10, 50, 100)),
+  student2 = round(runif(10, 50, 100)),
+  student3 = round(runif(10, 50, 100)),
+  student4 = round(runif(10, 50, 100)),
+  student5 = round(runif(10, 50, 100))
+)
+```
+
+## 背景
+
+背景：我们对列表求均值时，发现不能直接mean()，因为mean这些函数都是向量式函数，对象都是向量。
+
+```{r}
+exams
+list(
+  student1 = mean(exams$student1),
+  student2 = mean(exams$student2),
+  student3 = mean(exams$student3),
+  student4 = mean(exams$student4),
+  student5 = mean(exams$student5)
+)
+```
+
+## R包的purr()函数
+
+### map()函数
+
+[`map(`](https://purrr.tidyverse.org/reference/map.html)list/vector,function[`)`](https://purrr.tidyverse.org/reference/map.html)函数的第一个参数是list或者vector， 第二个参数是函数。map函数默认输出的是列表。map_dbl则输出双精度型数值向量。
+
+![](https://bookdown.org/wangminjie/R4DS/images/map_function3.png)
+
+```{r}
+exams
+map(exams, mean)
+exams %>% map_dbl(mean)
+exams %>% map_df(var)
+map(exams, sort) #将每位同学的成绩排序，默认是升序
+```
+
+### 匿名函数
+
+函数分为命名函数x \<- function(){...}。也有匿名函数，就是没有命名的函数。
+
+匿名函数的写法主要有3种：
+
+    (1)function(x) x - mean(x)
+    (2)~ .x - mean(.x) #用~代替function()，但代价是参数必须是规定的写法，比如.x
+    (3)~ . - mean(.) #有时候，程序员觉得x还是有点多余，于是更够懒一点，只用.， 也是可以的
+
+`~` 告诉 [`map()`](https://purrr.tidyverse.org/reference/map.html) 后面跟随的是一个匿名函数，`.` 对应函数的参数，可以认为是一个占位符，等待传送带的student1、student2到student5 依次传递到函数机器。
+
+```{r}
+#命名函数
+my_fun <- function(x){
+  x - mean(x)
+} 
+exams
+#匿名函数：function(x) x - mean(x)
+exams %>% 
+  map(function(x) x - mean(x))
+```
+
+如果熟悉匿名函数的写法，会增强代码的可读性。比如下面这段代码，找出每位同学有多少门考试成绩是高于80分的
+
+```{r}
+exams
+exams %>% 
+  map_int(~ length(.[. > 80]))
+```
+
+### tibble函数中应用map
+
+Tibble本质上是向量构成的列表，因此tibble也适用map。[`map()`](https://purrr.tidyverse.org/reference/map.html)中的函数`f`，可以作用到每一列
+
+```{r}
+tb <- 
+  tibble(
+    col_1 = c(1, 2, 3),
+    col_2 = c(100, 200, 300),
+    col_3 = c(0.1, 0.2, 0.3)
+  )
+tb
+map_dbl(tb, median)
+penguins %>%
+  map_int(~ sum(is.na(.)))
+```
+
+### **map2()函数针对两个变量进行计算操作**
+
+map2()函数和map()函数类似，不同在于map2()接受两个的向量，这两个向量必须是**等长。**在map()函数使用匿名函数，可以用 . 代表输入向量的每个元素。在map2()函数， .不够用，所有需要需要用 .x 代表第一个向量的元素，.y代表第二个向量的元素
+
+map(a, b, \~.x+.y)
+
+```{r}
+x <- c(1, 2, 3)
+y <- c(4, 5, 6)
+map2(x,y,~.x + .y)
+
+```
+
+tibble的每一列都是向量，所以可以把`map2()`放在`mutate()`函数内部，对tibble的多列同时迭代
+
+```{r}
+df <- tibble(
+    a = c(1, 2, 3),
+    b = c(4, 5, 6)
+  )
+df
+
+df %>% mutate(min = map2_dbl(a, b, ~min(.x, .y)))
+df %>% mutate(min = map2_dbl(a, b, ~.x+.y))
+```
+
+### pmap()函数对多个变量进行计算操作
+
+`不论是map还是map2,还是pmap，都要和mutate结合在一起才能更好用。此外，pmap中需要在参数中指定变量名list(varlist)`
+
+`pmap()`函数有点不一样的地方：
+
+-   `map()`和`map2()`函数，指定传递给函数f的对位，对每个人的位置
+
+-   `pmap()`需要将传递给函数的变量名，先装入一个list()中，再传递给函数f
+
+-   pmap中变量是多个，因此不再使用`.x`，`.y`而是`..1`分别代表第一个`..2`、`..3`第二个相对和第三个相对。
+
+pmap_dbl(list(x,y,z),\~..1+..2+..3)
+
+```{r}
+df <- tibble(
+  a = c(50, 60, 70),
+  b = c(10, 90, 40),
+  c = c(1, 105, 200)
+) 
+df %>% pmap_dbl(min)
+df %>% pmap_dbl( ~ ..1 + ..2 - ..3) #傻不拉几，我们平时用的命令如果没有数据集的形式出现就会觉得不对劲，所以要和mutate结合起来用才顺畅。
+df %>% 
+  mutate(total = pmap_dbl(list(a, b, c), ~ ..1 + ..2 - ..3))
+
+pmap(
+  list(1:5, 5:1, 2), ~ ..1 + ..2 - ..3
+  )
+
+```

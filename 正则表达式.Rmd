@@ -1,0 +1,446 @@
+---
+title: "正则表达式"
+author: "Su Qing"
+date: "2022/9/6"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio)
+library(stringr)
+here()
+```
+
+## 转义符
+
+当生成一个字符变量时，我们有时候需要使用到"",/等符号，但是在R中这些符号有着特殊的意义。如果我们想在字符串中出现这些符号，就需要使用转义符\\。其他还有换行符 `\n` 和制表符 `\t`
+
+但是， `.` 可以匹配任意字符，那么如何匹配字符 `.` 呢？你需要使用一个"转义"符号来告诉正则表达式实际上就是要匹配 `.` 这个字符，而不是使用 `.` 来匹配其他字符。和字符串一样，正则表达式也使用反斜杠来去除某些字符的特殊含义。因此，如果要匹配 `.`，那么你需要的正则表达式就是 `\.`。遗憾的是，这样做会带来一个问题。因为我们使用字符串来表示正则表达式，而且 `\` 在字符串中也用作转义字符，所以正则表达式 `\.` 的字符串形式应是 `\\.`：
+
+如果 `\` 在正则表达式中用作转义字符，那么如何匹配 `\` 这个字符呢？我们还是需要去除其特殊意义，建立形式为 `\\` 的正则表达式。要想建立这样的正则表达式，我们需要使用一个字符串，其中还需要对 `\` 进行转义。这意味着要想匹配字符 `\`，我们需要输入 `"\\\\"`------你需要 4 个反斜杠来匹配 1 个反斜杠！
+
+需要注意的是字符打印的时候包括转移符，如果要显示字符串本身的内容建议使用writeLines()
+
+```{r}
+x <- c("\"", "\\")
+x
+#> [1] "\"" "\\"
+writeLines(x)
+```
+
+## 求字符串的长度str_length()
+
+`str_length()` 函数可以返回字符串中的字符数量
+
+```{r}
+str_length(c("a", "R for data science", NA))
+
+```
+
+## 字符串组合
+
+要想组合两个或更多字符串，可以使用 `str_c()` 函数：
+
+```{r}
+str_c("x", "y", "z")
+```
+
+可以使用 `sep` 参数来控制字符串间的分隔方式：
+
+```{r}
+str_c("x", "y", sep = ", ")
+str_c("x","y",sep = "_")
+```
+
+和多数 R 函数一样，缺失值是可传染的。如果想要将它们输出为 `"NA"`，可以使用 `str_replace_na()`：
+
+```{r}
+x <- c("abc", NA)
+str_c("|-", x, "-|")
+str_c("|-", str_replace_na(x), "-|")
+```
+
+如以上代码所示，`str_c()` 函数是向量化的，它可以自动循环短向量，使得其与最长的向量具有相同的长度：
+
+```{r}
+str_c("prefix-", c("a", "b", "c"), "-suffix")
+```
+
+要想将字符向量合并为字符串，可以使用 `collapse()` 函数：
+
+```{r}
+str_c(c("x", "y", "z"), collapse = ", ")
+str_c(c("x", "y", "z"), collapse = " ")
+```
+
+## 字符串取子集
+
+可以使用 `str_sub()` 函数来提取字符串的一部分。除了字符串参数外，`str_sub()` 函数中还有 `start` 和 `end` 参数，它们给出了子串的位置（包括 `start` 和 `end` 在内）：
+
+```{r}
+x <- c("Apple", "Banana", "Pear")
+str_sub(x, 1, 4)
+str_sub(x, -3, -1)
+str_sub(x, 1, 1)
+str_sub(x, 1, 1) <- str_to_lower(str_sub(x, 1, 1)) #使用 str_sub() 函数的赋值形式来修改字符串
+```
+
+## 字符排序
+
+需要注意设置区域，不同国家排序不一样
+
+```{r}
+x <- c("apple", "eggplant", "banana")
+
+str_sort(x, locale = "en")  # 英语
+```
+
+## 使用正则表达式进行模式匹配
+
+通过 `str_view()` 和 `str_view_all()` 函数来学习正则表达式。这两个函数接受一个字符向量和一个正则表达式，并显示出它们是如何匹配的。
+
+### 基础匹配：也即精准匹配
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "ana") #精准匹配
+str_view(x,".a") #.代表一个任意的字符
+dot <- "\\." #对字符.如何进行匹配呢？使用\\两次转义符即可
+writeLines(dot)
+str_view(c("abc", "a.c", "bef"), "a\\.c")
+
+x <- "a\\b"
+writeLines(x)
+str_view(x, "\\\\")
+```
+
+## 锚点（确定匹配位置）
+
+默认情况下，正则表达式会匹配字符串的任意部分。有时我们需要在正则表达式中设置**锚点**，以便 R 从字符串的开头或末尾进行匹配。我们可以设置两种锚点。
+
+`- ^`从字符串开头进行匹配。
+
+`- $` 从字符串末尾进行匹配。
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "^a") #匹配开头是a
+str_view(x, "a$") #匹配结尾是a
+```
+
+如果想要强制正则表达式匹配一个完整字符串，那么可以同时设置 `^` 和 `$` 这两个锚点：
+
+```{r}
+x <- c("apple pie", "apple", "apple cake")
+str_view(x, "apple")
+str_view(x, "^apple$") #匹配完整的字符串
+```
+
+## 字符类与字符选项
+
+-   `\d` 可以匹配任意数字。
+
+-   `\s` 可以匹配任意空白字符（如空格、制表符和换行符）。
+
+-   `[abc]` 可以匹配 `a`、`b` 或 `c`。注意[ ]在正则表达式中表示或。"\\\\d[xy]"表示匹配数字+x/y
+
+-   `[^abc]` 可以匹配除 `a`、`b`、`c` 外的任意字符，包括数字。
+
+-   请牢记，要想创建包含 `\d` 或 `\s` 的正则表达式，你需要在字符串中对 `\` 进行转义，因此需要输入 `"\\d"` 或 `"\\s"`。
+
+-   你还可以使用**字符选项**创建多个可选的模式。例如，`abc|d..f` 可以匹配 `abc` 或 `deaf`。注意，因为 `|` 的优先级很低，所以 `abc|xyz` 匹配的是 `abc` 或 `xyz`，而不是 `abcyz` 或 `abxyz`。与数学表达式一样，如果优先级让人感到困惑，那么可以使用括号让其表达得更清晰一些：
+
+```{r paged.print=FALSE}
+str_view(c("grey", "gray","greay"), "gr(e|a)y")
+str_view(c("3","23d","a4a","a444","2a3"),"(\\d|[abc])\\d") #需要注意正则表达式的位数也很重要
+#23 a4
+```
+
+## 重复，控制匹配的次数
+
+### 正则表达式的另一项强大功能是，其可以控制一个模式能够匹配多少次。
+
+-   `?`：0 次或 1 次。
+
+-   `+`：1 次或多次。
+
+-   `*`：0 次或多次。
+
+```{r}
+x <- "1888 is the longest year in Roman numerals: MDCCCLXXXVIII"
+str_view(x, "CC?") #匹配0或1次
+str_view(x, "CC+") #匹配1+次
+str_view(x, "CC*") #匹配0次或多次
+str_view(x, 'C[LX]+')
+```
+
+### 精确设置匹配的次数{n,m}表示匹配n次到m次
+
+-   `{n}`：匹配 *n* 次。
+
+-   `{n,}`：匹配 *n* 次或更多次。
+
+-   `{,m}`：最多匹配 *m* 次。
+
+-   `{n, m}`：匹配 *n* 到 *m* 次。
+
+-   ***默认的匹配方式是"贪婪的"：正则表达式会匹配尽量长的字符串。***通过在正则表达式后面添加一个 `?`，你可以将匹配方式更改为"懒惰的"，即匹配尽量短的字符串。虽然这是正则表达式的高级特性，但知道这一点是非常有用的。?会抵消掉前面的一次匹配
+
+```{r}
+x <- "1888 is the longest year in Roman numerals: MDCCCLXXXVIII"
+str_view(x, "C{2}")
+str_view(x, "C{2,}")
+str_view(x, "C{2,3}")
+str_view(x, "CL?") #相当于只匹配C
+
+str_view(x, 'C[LX]') #相当于匹配CL or CX
+str_view(x, 'C[LX]+') #相当于匹配CL... or CX...
+str_view(x, 'C[LX]+?') #相当于匹配CL or CX
+str_view(x, 'C[LX]?') #相当于匹配C
+```
+
+## 分组与回溯引用
+
+你已经在前面学习了( )可以用于消除复杂表达式中的歧义,如符号顺序。括号还可以定义"分组"，你可以通过**回溯引用**（如 `\1`、`\2` 等）来引用这些分组。例如，以下的正则表达式可以找出名称中有重复的一对字母的所有水果：\\\\1与前面一个()中的字符一样。\\\\2表示与前面2个()中的字符一样。
+
+```{r}
+fruit
+str_view(fruit, "(..)\\1", match = TRUE)
+```
+
+## 匹配检测,计算匹配次数
+
+要想确定一个字符向量能否匹配一种模式，可以使用 `str_detect()` 函数。它返回一个与输入向量具有同样长度的逻辑向量：
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_detect(x, "e")
+```
+
+记住，从数学意义上来说，逻辑向量中的 `FALSE` 为 0，`TRUE` 为 1。这使得在匹配特别大的向量时，`sum()` 和 `mean()` 函数能够发挥更大的作用：
+
+```{r}
+# 有多少个以t开头的常用单词？
+sum(str_detect(words, "^t"))
+# 以元音字母结尾的常用单词的比例是多少？
+mean(str_detect(words, "[aeiou]$"))
+```
+
+当逻辑条件非常复杂时（例如，匹配 a 或 b，但不匹配 c，除非 d 成立），一般来说，相对于创建单个正则表达式，使用逻辑运算符将多个 `str_detect()` 调用组合起来会更容易。例如，以下两种方法均可找出不包含元音字母的所有单词：
+
+```{r}
+x <- c("cdf",'23','23ac','cs12a')
+x
+# 匹配a或b
+ppab <- str_detect(x, "[ab]")
+ppab
+# 不匹配c
+bppc <- !str_detect(x, "c")
+bppc
+
+y <- ppab + bppc
+y
+identical(ppab, bppc)
+#> [1] TRUE
+```
+
+```{r}
+df <- tibble(
+  word = words,
+  i = seq_along(word)
+)
+df
+df %>%
+  filter(str_detect(words, "x$"))
+```
+
+`str_detect()` 函数的一种变体是 `str_count()`，后者不是简单地返回是或否，而是返回字符串中匹配的数量：
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_count(x, "a")
+
+# 平均来看，每个单词中有多少个元音字母？
+mean(str_count(words, "[aeiou]"))
+
+#str_count() 也完全可以同 mutate() 函数一同使用：
+
+df %>%
+  mutate(
+    vowels = str_count(word, "[aeiou]"),
+    consonants = str_count(word, "[^aeiou]")
+  )
+```
+
+注意，匹配从来不会重叠。例如，在 `"abababa"` 中，模式 `"aba"` 会匹配多少次？正则表达式会告诉你是 2 次，而不是 3 次：
+
+```{r}
+str_count("abababa", "aba")
+str_view_all("abababa", "aba")
+```
+
+## 提取匹配内容
+
+要想提取匹配的实际文本，我们可以使用 `str_extract()` 函数。为了说明这个函数的用法，我们需要一个更加复杂的示例。我们将使用维基百科上的 Harvard sentences，这个数据集是用来测试 VOIP 系统的，但也可以用来练习正则表达式。这个数据集的全名是 `stringr::sentences`：
+
+假设我们想要找出包含一种颜色的所有句子。首先，我们需要创建一个颜色名称向量，然后将其转换成一个正则表达式：
+
+```{r}
+length(sentences)
+head(sentences)
+colors <- c(
+  "red", "orange", "yellow", "green", "blue", "purple"
+)
+color_match <- str_c(colors, collapse = "|")
+color_match
+has_color <- str_subset(sentences, color_match) #如果没有这一步，会出现太多缺失值，否则可以直接用str_extract
+head(has_color)
+matches <- str_extract(has_color, color_match)
+head(matches)
+```
+
+注意，`str_extract()` 只提取第一个匹配。我们可以先选取出具有多于一种匹配的所有句子，然后就可以很容易地看到更多匹配：
+
+```{r}
+more <- sentences[str_count(sentences, color_match) > 1]
+str_view_all(more, color_match)
+str_extract(more, color_match)
+
+str_extract_all(more, color_match)
+```
+
+## 分组匹配
+
+我们在本章前面讨论了括号在正则表达式中的用法，它可以阐明优先级，还能对正则表达式进行分组，分组可以在匹配时回溯引用。你还可以使用括号来提取一个复杂匹配的各个部分。举例来说，假设我们想从句子中提取出名词。我们先进行一种启发式实验，找出跟在 a 或 the 后面的所有单词。因为使用正则表达式定义"单词"有一点难度，所以我们使用一种简单的近似定义------至少有 1 个非空格字符的字符序列：
+
+```{r}
+noun <- "(a|the) ([^ ]+)"
+has_noun <- sentences %>% 
+  str_subset(noun) %>% 
+  head()
+has_noun
+has_noun %>% 
+  str_extract(noun)
+```
+
+`str_extract()` 函数可以给出完整匹配；`str_match()` 函数则可以给出每个独立分组。`str_match()` 返回的不是字符向量，而是一个矩阵，其中一列是完整匹配，后面的列是每个分组的匹配：
+
+```{r}
+has_noun %>% 
+  str_match(noun)
+```
+
+如果数据是保存在 tibble 中的，那么使用 `tidyr::extract()` 会更容易。这个函数的工作方式与 `str_match()` 函数类似，只是要求为每个分组提供一个名称，以作为新列放在 tibble 中：
+
+```{r}
+tibble(sentence = sentences) %>%
+  tidyr::extract(
+    sentence, c("article", "noun"), "(a|the) ([^ ]+)",
+    remove = FALSE
+  )
+
+```
+
+与 `str_extract()` 函数一样，如果想要找出每个字符串的所有匹配，你需要使用 `str_match_all()` 函数
+
+## 替换匹配内容
+
+`str_replace()` 和 `str_replace_all()` 函数可以使用新字符串替换匹配内容。最简单的应用是使用固定字符串替换匹配内容：
+
+```{r}
+x <- c("apple", "pear", "banana")
+str_replace(x, "[aeiou]", "-")
+str_replace_all(x, "[aeiou]", "-")
+```
+
+通过提供一个命名向量，使用 `str_replace_all()` 函数可以同时执行多个替换：
+
+```{r}
+x <- c("1 house", "2 cars", "3 people")
+str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
+#> [1] "one house"    "two cars"     "three people"
+```
+
+**除了使用固定字符串替换匹配内容，你还可以使用回溯引用来插入匹配中的分组。在下面的代码中，我们交换了第二个单词和第三个单词的顺序：**
+
+```{r}
+head(sentences,5)
+sentences %>%
+  str_replace("([^ ]+) ([^ ]+) ([^ ]+)", "\\1 \\3 \\2") %>%
+  head(5)
+```
+
+## 拆分
+
+`str_split()` 函数可以将字符串拆分为多个片段。例如，我们可以将句子拆分成单词：
+
+```{r}
+sentences %>%
+  head(5) %>%
+  str_split(" ")
+
+```
+
+因为字符向量的每个分量会包含不同数量的片段，所以 `str_split()` 会返回一个列表。如果你拆分的是长度为 1 的向量，那么只要简单地提取列表的第一个元素即可：
+
+```{r}
+"a|b|c|d" %>%
+  str_split("\\|") %>%
+  .[[1]]
+```
+
+### 定位匹配内容
+
+`str_locate()` 和 `str_locate_all()` 函数可以给出每个匹配的开始位置和结束位置。当没有其他函数能够精确地满足需求时，这两个函数特别有用。你可以使用 `str_locate()` 函数找出匹配的模式，然后使用 `str_sub()` 函数来提取或修改匹配的内容。
+
+## 其他类型的模式
+
+当使用一个字符串作为模式时，R 会自动调用 `regex()` 函数对其进行包装：
+
+    # 正常调用：
+    str_view(fruit, "nana")
+    # 上面形式是以下形式的简写
+    str_view(fruit, regex("nana"))
+
+你可以使用 `regex()` 函数的其他参数来控制具体的匹配方式。
+
+-   ignore_case = TRUE 既可以匹配大写字母，也可以匹配小写字母，它总是使用当前的区域设置
+
+-   `multiline = TRUE` 可以使得 `^` 和 `$` 从每行的开头和末尾开始匹配，而不是从完整字符串的开头和末尾开始匹配。
+
+-   `comments = TRUE` 可以让你在复杂的正则表达式中加入注释和空白字符，以便更易理解。匹配时会忽略空格和 `#` 后面的内容。如果想要匹配一个空格，你需要对其进行转义：`"\\ "`：
+
+```{r}
+bananas <- c("banana", "Banana", "BANANA")
+str_view(bananas, "banana")
+str_view(bananas, regex("banana", ignore_case = TRUE))
+
+x <- "Line 1\nLine 2\nLine 3" #\n表示换行符
+x
+writeLines(x)
+str_extract_all(x, "^Line")[[1]]
+#> [1] "Line"
+str_extract_all(x, regex("^Line", multiline = TRUE))[[1]]
+#> [1] "Line" "Line" "Line"
+
+phone <- regex("
+  \\(?     # 可选的开括号
+  (\\d{3}) # 地区编码
+  [)- ]?   # 可选的闭括号、短划线或空格
+  (\\d{3}) # 另外3个数字
+  [ -]?    # 可选的空格或短划线
+  (\\d{3}) # 另外3个数字
+  ", comments = TRUE)
+　
+str_match("514-791-8141", phone)
+
+
+```

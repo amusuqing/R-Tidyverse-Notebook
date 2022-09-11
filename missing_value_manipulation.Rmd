@@ -1,0 +1,211 @@
+---
+title: "Missing data manupulating"
+author: "Su Qing"
+date: "2022/9/8"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+library(rio)
+library(stringr)
+here()
+```
+
+## 描述缺失值
+
+### 计算缺失值的数量
+
+-   描述整个数据集的缺失值情况;
+-   描述单个变量的缺失值情况；
+-   描述某个变量集合的缺失值情况。
+
+```{r}
+df <- tibble(id=c(1,1,2,2,3,3,4,4,5,5),year=rep(c(2015,2018),times=5),depr=c(2,NA,NA,2,4,NA,8,3,7,NA),sati=c(NA,4,NA,8,9,NA,7,3,7,NA))
+datatable(df)
+#1.数据集的缺失值
+df %>%
+  summarise(
+    across(everything(),~sum(is.na(.)))
+  ) %>% 
+  pivot_longer(cols=everything())
+
+#2.描述单个变量的缺失值
+df %>% count(depr)
+df %>% summary(depr)
+
+#3.批量描述变量的缺失值情况
+df %>%
+  summarise(
+    across(depr:sati,~sum(is.na(.)))
+  ) %>% 
+  pivot_longer(cols=everything())
+  
+```
+
+## manipulate 缺失值
+
+### 缺失值转换为特定数值
+
+**replace_na()用特定值替换缺失值。replace_na(data,list(x=,y=,...), ...).可以通过list(x=,y=.)将不同变量的缺失值转换为不同的值。**
+
+案例1：将不同变量中的缺失值转换为不同的取值。如：变量x缺失值替换为0，变量y缺失值替换为"na",z为99
+
+```{r}
+df <- tibble(x = c(1, 2, NA), y = c("a", NA, "b"),z = c(3,4,NA))
+df
+
+df$y %>% 
+  replace_na("4") #单独以一个向量为单位时需要指明replace_na(df$y,"4")
+df %>% 
+  replace_na(list(y = "na"))
+df %>% 
+  replace_na(list(x = 0, y = "na",z = 99)) 
+
+df_list <- tibble(z = list(1:5, NULL, 10:20))
+datatable(df_list)
+df_list %>% replace_na(list(z = list(5))) %>% datatable
+```
+
+### 缺失值转换为分组统计量
+
+其实所有的值都可以用下面的模板来替换取值，即利用if_else语句，在一定的条件下，可以是用固定的值替换，也可以是用其他变量来替换。
+
+```{r,eval=FALSE}
+df %>% 
+  mutate(
+    y = if_else(逻辑语句，x2, x1)
+  )
+```
+
+案例2：用不同学科的平均成绩来填补缺失值。思路是先分组计算不同学科的平均成绩，然后用平均成绩填补缺失值。
+
+```{r}
+df <- tibble::tribble(
+    ~name,     ~type, ~score,
+  "Alice", "english",    80,
+  "Alice",    "math",    NA,
+    "Bob", "english",    70,
+    "Bob",    "math",    69,
+  "Carol", "english",    NA,
+  "Carol",    "math",    90
+  )
+df
+#两步法，虽然笨，但是是一种思路
+df %>% 
+  group_by(type) %>% 
+  mutate(
+    mean_score = mean(score,na.rm = TRUE),
+    fill_score = if_else(is.na(score),mean_score,score)
+  ) %>% 
+  ungroup()
+#一步到位，更加简单
+df %>% 
+  group_by(type) %>% 
+  mutate(
+    fill_score = if_else(is.na(score),mean(score,na.rm= TRUE),score)) %>% 
+  ungroup()
+```
+
+### 用一个变量的值去替换另一个变量的缺失值:coalesce()函数
+
+coalesce(vec1,vec2)函数中vec2可以是单一的数值或字符，也可以是和vec1等长的向量.
+
+-   该函数可以认为是vec2的值替换了vec1的缺失值。
+
+案例3：用某人的extra去替换score的缺失值。
+
+```{r}
+df <- tibble::tribble(
+    ~name,     ~type, ~score, ~extra,
+  "Alice", "english",     80,     10,
+  "Alice",    "math",     NA,      5,
+    "Bob", "english",     NA,      9,
+    "Bob",    "math",     69,     NA,
+  "Carol", "english",     80,     10,
+  "Carol",    "math",     90,      5
+  )
+df
+df %>% mutate(score = coalesce(score, 0))
+df %>% mutate(score = coalesce(score, extra))
+df %>% mutate(extra = coalesce(extra, score))
+
+df1 <- tibble(
+  age1 = c(12,11,NA,24,NA),
+  age2 = c(21,11,23,NA,NA))
+df1
+
+df1 %>% 
+  mutate(age = if_else(is.na(age2), age1,age2))
+```
+
+### 将变量的数值转换为缺失值
+
+案例4：将小于0的值和大于20的值全部转换为缺失值**NA_real\_,一定要注意是NA_real\_**
+
+```{r}
+test <- tibble(
+  Staff.Confirmed = c(0, 1, 999,5),
+  Residents.Confirmed = c(12, -192, 0,9)
+)
+test
+test %>% 
+  mutate(
+    across(
+      .cols = everything(),
+      ~if_else(.x < 0 | .x > 20,NA_real_,.x),
+      .names = "res_{.col}"
+    )
+  )
+```
+
+### 多期数据的缺失值相互填补：fill()函数，应用前先排序
+
+fill(data,c(x,y..z), **.direction** = c("down", "up", "downup","updown")) 默认是down，即用上一期的数据填补下一期的数据。
+
+这一应用场景主要是在面板数据中出现，比如我会用15年的数据去填补18年的数据，或者用18年的数据去填补15年的数值。最常用的情况是15年数据和18年数据相互填补。
+
+```{r}
+panel <- tibble(id=c(1,1,2,2,3,3,4,4,5,5),year=rep(c(2015,2018),times=5),depr=c(2,NA,NA,2,4,NA,8,3,7,NA),sati=c(NA,4,NA,8,9,NA,7,3,7,NA))
+datatable(panel)
+ 
+panel %>% 
+  group_by(id) %>% 
+  fill(c(depr)) #默认是用上一期的数值填补这一期的数值
+
+panel %>% 
+  group_by(id) %>% 
+  fill(depr,.direction = "up") #up是用这一期的数值填补上一期的数值
+
+panel %>% 
+  group_by(id) %>% 
+  fill(depr:sati,.direction = "downup") #先向下填补再向上填补
+```
+
+## drop_na删除缺失值
+
+-   删除某个变量的缺失值
+
+-   删除整个数据集的缺失值
+
+-   删除某些变量的缺失值
+
+```{r}
+df <- tibble(id=c(1,1,2,2,3,3,4,4,5,5),year=rep(c(2015,2018),times=5),depr=c(2,NA,NA,2,4,NA,8,3,7,NA),sati=c(NA,4,NA,8,9,NA,7,3,7,NA))
+df
+df %>% drop_na() %>% 
+  nrow()
+df %>% drop_na(depr) %>% 
+  nrow()
+vars <- c("sati","depr")
+df %>% drop_na(any_of(vars)) %>% 
+  nrow()
+
+```

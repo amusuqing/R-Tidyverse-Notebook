@@ -1,0 +1,470 @@
+---
+title: "Nick_01"
+author: "Su Qing"
+date: "2022/9/1"
+content: tidyverse
+output: 
+  html_document: 
+    toc: yes
+    number_sections: yes
+---
+
+```{r setup, message=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+library(tidyverse)
+library(DT)
+library(palmerpenguins)
+library(dplyr)
+library(here)
+here()
+```
+
+## tidyverse的核心-pipe
+
+The pipe %\>% \#管道符 快捷键： Ctrl Shift M
+
+Like a conveyer belt! Nice and easy. Note that future versions of R will switch to the use of \|\> for the pipe pull() is a dplyr function that says "give me back this one variable instead of a data set" but in a pipe-friendly way, so mtcars %\>% pull(am) is the same as mtcars\$am or mtcars[['am']]
+
+```{r}
+mtcars %>%
+  pull(am) %>%
+  mean(na.rm = TRUE) %>%
+  scales::percent(accuracy = .1)
+```
+
+## **如何"查看数据"?**
+
+**\
+字面上是一种方法-单击数据集，或执行View()查看它\
+汇总统计表:例如vtable中的sumtable()或vtable(lush = TRUE)\
+检查它取什么值:table()或summary()对单个变量** **sum(data\$variable==value)\
+寻找:有什么值，观察结果是什么样子的，是否存在缺失或不可用的数据，数据是如何构成?**
+
+**table(var,useNA = "ifany") 看变量的取值个数，同时也会展示出该变量NA数量**
+
+## **summary(var) \#会展示出NA的个数**
+
+```{r}
+mtcars
+mtcars$mpg
+sum(mtcars$mpg==21)
+table(mtcars$cyl)
+x1 <- c(1,2,2,3,4,3,NA,NA,NA)
+table(x1,useNA = "ifany")
+summary(x1)
+```
+
+# across函数之美
+
+## 就算所有变量的缺失值个数
+
+```{r}
+penguins
+penguins %>%
+  summarise_all(
+    ~ sum(is.na(.))
+  )
+```
+
+## 分组计算平均值
+
+### 不利用across，按企鹅的类型计算特征的平均值（**na.rm=TRUE）**
+
+```{r}
+#分组计算部分变量的平均值
+penguins %>%
+  group_by(species) %>%
+  summarise(
+    mean_length   = mean(bill_length_mm, na.rm = TRUE),
+    mean_depth    = mean(bill_depth_mm, na.rm = TRUE),
+    mean_flipper  = mean(flipper_length_mm, na.rm = TRUE),
+    mean_body     = mean(body_mass_g, na.rm = TRUE)
+  )
+#分组计算全部数值变量的平均值
+d1 <- penguins %>%
+  group_by(species) %>%
+  summarise_if(is.numeric, mean, na.rm = TRUE)
+d1
+#分组计算不同种类企鹅的数量
+d2 <- penguins %>%
+  group_by(species) %>%
+  summarise(
+    n = n()
+  )
+d2
+
+#将数据d1d2合并
+d1 %>% 
+  left_join(d2,by = "species")
+```
+
+### 按照across函数来完成上述任务
+
+```{r}
+penguins %>%
+  group_by(species) %>%
+  summarise(
+    across(where(is.numeric) & !year, mean, na.rm = TRUE),
+    n = n()
+  )
+```
+
+## across函数参数解析
+
+函数的形式：across(.cols = , .fns = , .names = )
+
+-   第一个参数.cols = ，选取我们要需要的若干列，选取多列的语法与[`select()`](https://dplyr.tidyverse.org/reference/select.html)的语法一致，选择方法非常丰富和人性化
+
+    -   逻辑语句：\| & ！
+
+    -   `everything()`: 选取所有的变量
+
+    -   [`last_col()`](https://tidyselect.r-lib.org/reference/everything.html): 选取最后一列，也就说倒数第一列，也可以`last_col(offset = 1L)` 就是倒数第二列
+
+    -   [`starts_with()`](https://tidyselect.r-lib.org/reference/starts_with.html): 指定一组变量名的前缀，也就把选取具有这一前缀的变量，`starts_with("bill_")`
+
+    -   [`ends_with()`](https://tidyselect.r-lib.org/reference/starts_with.html): 指定一组变量名的后缀，也就选取具有这一后缀的变量，`ends_with("_mm")`
+
+    -   [`contains()`](https://tidyselect.r-lib.org/reference/starts_with.html): 指定变量名含有特定的字符串，也就是选取含有指定字符串的变量，`ends_with("length")`
+
+    -   常见的有数据类型函数 `where(is.numeric), where(is.factor), where(is.character), where(is.date)`
+
+-   第二个参数`.fns =`，我们要执行的函数（或者多个函数），函数的语法有三种形式可选：
+
+    -   A function, e.g. `mean`.
+
+    -   A purrr-style lambda, e.g. `~ mean(.x, na.rm = TRUE)`
+
+    -   A list of functions/lambdas, e.g. `list(mean = mean, n_miss = ~ sum(is.na(.x))`
+
+<!-- -->
+
+-   第三个参数`.names =`, 如果`.fns`是单个函数就默认保留原来数据列的名称，即`"{.col}"` ；如果`.fns`是多个函数，就在数据列的列名后面跟上函数名，比如`"{.col}_{.fn}"`；当然，我们也可以简单调整列名和函数之间的顺序或者增加一个标识的字符串，比如弄成`"{.fn}_{.col}"`，`"{.col}_{.fn}_aa"`
+
+    ## 3.4 across的应用
+
+    ### 3.4.1批量计算变量缺失值个数
+
+```{r}
+# using across()
+penguins
+penguins %>%
+  summarise(
+    across(everything(), function(x) sum(is.na(x)))
+  )
+penguins %>%
+  mutate(
+    across(everything(), function(x) sum(is.na(x)),.names = "nan_{.col}")
+  )
+
+```
+
+但是这样得出的结果是横向展示的，非常不好看，这时候我们就可以使用pivot_longer函数来将宽数据转成长数据
+
+```{r}
+penguins %>%
+  summarise(
+    across(everything(), ~ sum(is.na(.)))
+  ) %>% 
+  pivot_longer( cols = everything() )
+```
+
+### 批量计算变量的取值或类型数量
+
+```{r}
+penguins %>%
+  summarise(
+    across(everything(), n_distinct)
+  ) %>% 
+  pivot_longer( cols = everything())
+
+```
+
+### 分组计算多个变量的多个统计值
+
+利用list()将需要计算的统计值列出来，名称是list，需要去除缺失值na.rm = TRUE
+
+```{r}
+datatable(penguins)
+penguins %>%
+  group_by(species) %>%
+  summarise(
+    across(ends_with("_mm"), list(mean = mean, sd = sd), na.rm = TRUE),
+    n = n()
+  )
+
+penguins %>%
+  group_by(species) %>%
+  mutate(
+    across(ends_with("_mm"), list(mean = mean, sd = sd), na.rm = TRUE),
+    n = n()
+  )
+
+penguins %>% 
+  group_by(sex) %>% 
+  summarise(
+    across(starts_with("bill_"),list(max = max, min = min),na.rm = TRUE)
+  )
+
+```
+
+### 计算多个变量的多个分位数
+
+[**理解R语言中\~的含义和.的含义**]{.ul}
+
+```{r}
+penguins %>%
+  group_by(species, island) %>%
+  summarise(
+    prob    = c(.25, .75),
+    length  = quantile(bill_length_mm, prob, na.rm = TRUE),
+    depth   = quantile(bill_depth_mm, prob, na.rm = TRUE),
+    flipper = quantile(flipper_length_mm, prob, na.rm = TRUE)
+  )
+#across函数
+penguins %>%
+  group_by(species, island) %>%
+  summarise(
+    prob = c(.25, .75),
+    across(
+      c(bill_length_mm, bill_depth_mm, flipper_length_mm),
+      ~ quantile(., prob, na.rm = TRUE)
+    )
+  )
+```
+
+### 数据标准化处理
+
+```{r}
+std <- function(x) {
+  (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+}
+penguins %>%
+  mutate(
+    across(where(is.numeric), std),
+    across(where(is.character), as.factor)
+  )
+is.factor(penguins$sex)
+
+```
+
+```{r}
+#using across() and purrr style（函数的快捷方式~.）
+penguins %>%
+  drop_na() %>% 
+  summarise(
+    across(starts_with("bill_"), ~ (.x - mean(.x)) / sd(.x))
+  )
+```
+
+### 取对数
+
+注意：先去除缺失值，再对数据集做处理。此外需要注意添加变量应该在命令中怎么去做。
+
+```{r}
+penguins %>%
+  drop_na() %>%
+  mutate(
+    across(where(is.numeric), log),
+    across(where(is.character), as.factor)
+  )
+
+penguins %>% 
+  mutate(
+    across(ends_with("_mm"),log,.names = "log_{.col}")
+  )
+
+```
+
+```{r}
+# using across()
+penguins %>%
+  drop_na() %>%
+  mutate(
+    across(where(is.numeric), .fns = list(log = log), .names = "{.fn}_{.col}"),
+    across(where(is.character), as.factor)
+  )
+```
+
+### **小于0的值，替换成NA**
+
+```{r}
+test <- tibble(
+  Staff.Confirmed = c(0, 1, -999), 
+  Residents.Confirmed = c(12, -192, 0)
+)
+
+test %>% 
+  mutate(
+    across(contains("Confirmed"), ~if_else(.x < 0, NA_real_, .x), .names = "res_{.col}")
+  )
+
+```
+
+### **与`cur_column()`配合使用**
+
+**cur_column()返回的是当前列名**
+
+```{r}
+df <- tibble(
+  g = sample(rep(letters[1:3], 1:3)),
+  x = runif(6),
+  y = runif(6)
+)
+df
+df %>%
+  group_by(g) %>%
+  mutate(
+    across(everything(), ~ paste(cur_column(), round(.x, 2)))
+    )
+```
+
+#### 每一列乘以不同的系数
+
+```{r}
+df   <- tibble(x = 1:3, y = 3:5, z = 5:7)
+datatable(df)
+mult <- list(x = 1, y = 10, z = 100)
+mult
+df %>% 
+  mutate(
+    across(all_of(names(mult)), ~ .x * mult[[cur_column()]],.names = "mult_{.col}")
+    )
+
+```
+
+#### 批量将连续变量转换成二分类变量，有不同的阈值
+
+```{r}
+df <- tibble(x = 1:3, y = 3:5, z = 5:7)
+datatable(df)
+cutoffs <- list(x = 2, y = 3, z = 7)
+df
+cutoffs
+names(cutoffs)
+df %>% mutate(
+  across(all_of(names(cutoffs)), ~ if_else(.x > cutoffs[[cur_column()]], 1, 0),.names = "bi_{.col}"))
+```
+
+## rowwise逐行计算，也可以叫变量组操作，即对一组变量进行操作，如对CESD-10量表，各类其他量表计算总分、重编码等等
+
+### 对一组变量进行计算，如一组血压值，最大的血压值为1，其余为0
+
+```{r}
+df <- tibble(x = 1:3, y = 3:5, z = 5:7)
+replace_rowwise_max <- function(vec) {
+  if (!is.vector(vec)) {
+    stop("input of replace_col_max must be vector.")
+  }
+  if_else(vec == max(vec), 1L, 0L)
+}
+
+df %>%
+  rowwise() %>%
+  mutate(
+    new = list(replace_rowwise_max(c_across(c(x,y,z))))
+  ) %>%
+  unnest_wider(new, names_sep = "_")
+```
+
+### 利用rowwise计算一组变量的总分
+
+rowwise本身并没有真正做任何事情；它只是改变了其他动词的工作方式。如果您使用[`mutate()`](https://dplyr.tidyverse.org/reference/mutate.html)常规数据框，它会计算[***所有行的`x`、`y`和`z`的平均值***]{.ul}。如果将其应用于逐行数据框，它会[***计算每一行的平均值***]{.ul}。如果是计算某个个体的平均血压值，需要使用的是rowwise and mutate但是如果是测量一个群体的血压均值，只需要使用mutate就行。
+
+```{r}
+df <- tibble(x = 1:3, y = 3:5, z = 5:7)
+sum(df)/9
+df %>% mutate(m = mean(c(x, y, z))) #计算群体的平均血压，生成变量m
+df %>% rowwise() %>% mutate(m = mean(c(x, y, z))) #计算个体的平均血压m
+```
+
+### 每行汇总统计
+
+使用rowwise的优势是能够将mutate函数进行逐行的操作，但是当一组变量太多的时候，我们对变量名的书写是麻烦的，这里我们引入c_across函数来解决这一问题。
+
+```{r}
+df <- tibble(id = 1:6, w = 10:15, x = 20:25, y = 30:35, z = 40:45)
+df
+rf <- df %>% rowwise(id)
+rf
+rf %>% mutate(total = sum(c(w, x, y, z))) #计算变量wxyz的和
+#rf %>% summarise(total = sum(c(w, x, y, z)))
+rf %>% mutate(total = sum(c_across(w:z))) #简洁的选择变量
+#rf %>% mutate(total = sum(c_across(where(is.numeric))))
+rf_pro <- rf %>% 
+  mutate(total = sum(c_across(w:z))) %>% 
+  ungroup() %>% 
+  mutate(across(w:z, ~ . / total))
+rf_pro
+rf_pro %>% 
+  select(-total,-id) %>% 
+  sum
+```
+
+### 逐行汇总函数rowSums,rowMeans
+
+这种逐行汇总函数很类似于stata命令，优势是速度快，但是缺点也很明显，并不是所有的函数都有直接的命令。建议在求和、均值等简单的方面直接使用，但是有复杂函数还是使用rowwise()函数将数据变成逐行数据集
+
+```{r}
+df %>% mutate(total = rowSums(across(where(is.numeric))))
+df %>% mutate(mean = rowMeans(across(where(is.numeric))))
+
+```
+
+```{r}
+df <- tibble(x = c(1, 2, NA), y = c("a", NA, "b"),z = c(3,4,NA))
+df %>% 
+  replace_na(list(x = 0, y = "unknown")) %>% 
+  datatable(df)
+df %>% mutate(x_na = replace_na(x, 0))
+df %>% 
+  mutate(across(c(x,z),replace_na,0))
+
+
+
+
+
+
+
+```
+
+```{r}
+df <- tibble(x = c(NA,1,NA, 2, NA), y = c(NA,"a",NA, NA, "b"),z = c(NA,3,NA,4,NA))
+df
+df %>% fill(z)
+df %>% fill(z,.direction = 'up')
+df %>% fill(z,.direction = 'downup')
+
+panel <- tibble(id=c(1,1,2,2,3,3,4,4,5,5),year=rep(c(2015,2018),times=5),depr=c(2,NA,NA,2,4,NA,8,3,7,NA),sati=c(NA,4,NA,8,9,NA,7,3,7,NA))
+panel
+
+panel %>% 
+  mutate(across(depr:sati,.x=.x,.names = "{.col}_a")) %>% 
+  group_by(id) %>%
+  fill(ends_with("_a"),.direction = "updown") %>% 
+  ungroup()
+
+
+# panel %>% 
+#   group_by(id) %>%
+#   mutate(
+#     across(depr:sati,fill(.,.direction = "updown"),.names = {.col}_m)
+#   ) %>%  
+#   ungroup()
+  
+```
+
+```{r}
+penguins %>% 
+  drop_na() %>% 
+  mutate(is_bigger40 = bill_length_mm > 40) %>% 
+  mutate(
+    bili=sum(is_bigger40/n())
+  )
+  
+a <- 1:10
+typeof(a)
+b <- seq(from = 1, to = 10, by = 1)
+typeof(b)
+identical(a, b)
+```

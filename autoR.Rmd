@@ -1,0 +1,45 @@
+---
+title: "Nico"
+author: "Su Qing"
+date: "2022/9/1"
+output: html_document
+contented: 自动化实现任务
+---
+
+## R Markdown
+
+```{r}
+library(tidyverse)
+```
+
+自动化1：across + mutate across()函数的使用,对一批变量进行相同的操作，可以结合编写的函数进行。 任务1：创建一个函数，表示x+a 任务2：加载mtcars数据集，要求以"p"结尾的变量都加1. 任务3：创建一个函数，可以要求以"p"结尾的变量都加a.
+
+```{r}
+
+xplusa <- function(x,a) {
+  return(x+a)
+}
+xplusa(5,4)
+
+mtcars
+mtcars %>% 
+  mutate(across(ends_with("p"),xplusa,a=1))
+
+my_plus_a_p <- function(a) {
+  data(mtcars)
+  mtcars %>% 
+    mutate(across(ends_with("p"),xplusa,a = a)) %>% 
+    return()
+}
+my_plus_a_p(3)
+
+1:5 %>% 
+  map_df(my_plus_a_p)
+
+```
+
+```{r}
+
+
+
+```
